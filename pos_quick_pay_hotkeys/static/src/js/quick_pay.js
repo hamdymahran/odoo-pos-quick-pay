@@ -65,6 +65,22 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
         return candidates[0] || null;
     }
 
+
+    // ينتظر انتهاء الطباعة (أو إغلاق نافذة الطباعة) قبل فتح طلب جديد،
+    // لأن كروم يلتقط الصفحة بعد استدعاء print() وليس لحظته.
+    function waitAfterPrint() {
+        var def = $.Deferred();
+        var timer;
+        var finish = function () {
+            window.removeEventListener('afterprint', finish);
+            clearTimeout(timer);
+            def.resolve();
+        };
+        window.addEventListener('afterprint', finish);
+        timer = setTimeout(finish, 60000);
+        return def;
+    }
+
     function quickPay(widget, kind) {
         var pos = widget.pos;
         var gui = widget.gui;
@@ -157,6 +173,24 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
 
     // طباعة مباشرة ثم الانتقال لطلب جديد بدون المرور بشاشة الإيصال
     screens.ReceiptScreenWidget.include({
+        _qpUsesProxy: function () {
+            return !!(this.pos.config.iface_print_via_proxy || (this.pos.proxy && this.pos.proxy.printer));
+        },
+        handle_auto_print: function () {
+            var order = this.pos.get_order();
+            if (order && order._qp_quick_pay && !order._printed && !this._qpUsesProxy()) {
+                var self = this;
+                waitAfterPrint().then(function () {
+                    var finalized = order.is_to_invoice() ? order.finalized : true;
+                    if (self.pos.get_order() === order && finalized) {
+                        self.click_next();
+                    }
+                });
+                this.print();
+                return;
+            }
+            return this._super.apply(this, arguments);
+        },
         should_auto_print: function () {
             var order = this.pos.get_order();
             if (order && order._qp_quick_pay) {
