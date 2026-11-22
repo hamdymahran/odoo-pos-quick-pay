@@ -2,7 +2,7 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
     'use strict';
 
     /*
-     * POS Quick Pay Hotkeys — Odoo 14 / 15
+     * POS Quick Pay Hotkeys — Odoo 16
      * Author: Hamdy Mahran
      *
      *   F10  -> pay the full amount in CASH, print the receipt, start a new order
@@ -14,6 +14,7 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
     const PaymentScreen = require('point_of_sale.PaymentScreen');
     const ReceiptScreen = require('point_of_sale.ReceiptScreen');
     const { _t } = require('web.core');
+    const { onMounted, onWillUnmount } = owl;
 
     // غيّر المفاتيح هنا إن أردت
     const HOTKEYS = { F10: 'cash', F12: 'card' };
@@ -79,13 +80,10 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
 
     const QuickPayProductScreen = (ProductScreen) =>
         class extends ProductScreen {
-            mounted() {
-                super.mounted();
-                bindKeys(this, (kind) => this._qpQuickPay(kind));
-            }
-            willUnmount() {
-                unbindKeys(this);
-                super.willUnmount();
+            setup() {
+                super.setup();
+                onMounted(() => bindKeys(this, (kind) => this._qpQuickPay(kind)));
+                onWillUnmount(() => unbindKeys(this));
             }
             async _qpQuickPay(kind) {
                 const order = this.env.pos.get_order();
@@ -105,8 +103,12 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
 
     const QuickPayPaymentScreen = (PaymentScreen) =>
         class extends PaymentScreen {
-            mounted() {
-                super.mounted();
+            setup() {
+                super.setup();
+                onMounted(() => this._qpOnMounted());
+                onWillUnmount(() => unbindKeys(this));
+            }
+            _qpOnMounted() {
                 bindKeys(this, (kind) => {
                     const method = pickMethod(configMethods(this.env.pos), kind);
                     if (!method) {
@@ -124,10 +126,6 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
                         this._qpPayWith(method);
                     }
                 }
-            }
-            willUnmount() {
-                unbindKeys(this);
-                super.willUnmount();
             }
             async _qpPayWith(method) {
                 if (busy) {
