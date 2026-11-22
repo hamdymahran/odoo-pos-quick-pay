@@ -34,6 +34,22 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
         );
     }
 
+
+    // ينتظر انتهاء الطباعة (أو إغلاق نافذة الطباعة) قبل فتح طلب جديد،
+    // لأن كروم يلتقط الصفحة بعد استدعاء print() وليس لحظته.
+    function waitAfterPrint() {
+        return new Promise((resolve) => {
+            let timer = null;
+            const finish = () => {
+                window.removeEventListener('afterprint', finish);
+                clearTimeout(timer);
+                resolve();
+            };
+            window.addEventListener('afterprint', finish);
+            timer = setTimeout(finish, 60000);
+        });
+    }
+
     function configMethods(pos) {
         const ids = pos.config.payment_method_ids || [];
         return pos.payment_methods.filter((m) => !ids.length || ids.includes(m.id));
@@ -167,6 +183,26 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
     // طباعة مباشرة ثم الانتقال لطلب جديد
     const QuickPayReceiptScreen = (ReceiptScreen) =>
         class extends ReceiptScreen {
+            async handleAutoPrint() {
+                const order = this.currentOrder;
+                const proxy = this.env.proxy || this.env.pos.proxy;
+                if (order && order._qpQuickPay && !(proxy && proxy.printer)) {
+                    if (order._printed) {
+                        return;
+                    }
+                    const printed = waitAfterPrint();
+                    await this.printReceipt();
+                    if (order._printed) {
+                        await printed;
+                        const finalized = order.is_to_invoice() ? order.finalized : true;
+                        if (this.currentOrder === order && finalized) {
+                            this.whenClosing();
+                        }
+                    }
+                    return;
+                }
+                return super.handleAutoPrint(...arguments);
+            }
             _shouldAutoPrint() {
                 const order = this.currentOrder;
                 if (order && order._qpQuickPay) {
