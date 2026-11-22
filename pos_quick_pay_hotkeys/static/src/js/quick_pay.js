@@ -1,6 +1,6 @@
 /** @odoo-module */
 /*
- * POS Quick Pay Hotkeys — Odoo 17
+ * POS Quick Pay Hotkeys — Odoo 18
  * Author: Hamdy Mahran
  *
  *   F10  -> pay the full amount in CASH, print the receipt, start a new order
@@ -12,7 +12,7 @@ import { patch } from "@web/core/utils/patch";
 import { onMounted, onWillUnmount } from "@odoo/owl";
 import { ProductScreen } from "@point_of_sale/app/screens/product_screen/product_screen";
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
-import { ErrorPopup } from "@point_of_sale/app/errors/popups/error_popup";
+import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 
 // غيّر المفاتيح هنا إن أردت
 export const HOTKEYS = { F10: "cash", F12: "card" };
@@ -33,7 +33,7 @@ function dialogOpen() {
 }
 
 function isTerminal(m) {
-    return Boolean(m.use_payment_terminal);
+    return Boolean(m.use_payment_terminal || m.payment_terminal);
 }
 
 export function pickMethod(methods, kind) {
@@ -46,12 +46,11 @@ export function pickMethod(methods, kind) {
 }
 
 function configMethods(pos) {
-    const ids = pos.config.payment_method_ids || [];
-    return pos.payment_methods.filter((m) => ids.includes(m.id));
+    return [...(pos.config.payment_method_ids || [])].sort((a, b) => a.sequence - b.sequence);
 }
 
 function showError(env, kind) {
-    env.services.popup.add(ErrorPopup, {
+    env.services.dialog.add(AlertDialog, {
         title: _t("Quick Pay"),
         body:
             kind === "cash"
@@ -106,7 +105,7 @@ patch(ProductScreen.prototype, {
             return showError(this.env, kind);
         }
         order._qpMethodId = method.id;
-        await this.onClickPay();
+        await this.pos.pay();
     },
 });
 
@@ -140,7 +139,7 @@ patch(PaymentScreen.prototype, {
         if (order.electronic_payment_in_progress()) {
             return showError(this.env, "busy");
         }
-        for (const line of [...order.get_paymentlines()]) {
+        for (const line of [...order.payment_ids]) {
             order.remove_paymentline(line);
         }
         // تضيف سطر دفع بكامل المبلغ المستحق
