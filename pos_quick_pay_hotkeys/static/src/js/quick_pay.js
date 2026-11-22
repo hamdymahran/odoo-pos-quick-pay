@@ -81,6 +81,33 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
         return def;
     }
 
+
+    // ينتظر اكتمال صور الإيصال (رمز QR والشعار) قبل الطباعة،
+    // لأن بعض مديولات الفاتورة الضريبية ترسم الـ QR بعد ظهور الإيصال.
+    function receiptReady(root) {
+        var imgs = root ? root.querySelectorAll('img') : [];
+        for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            if (!img.getAttribute('src') || !img.complete || !img.naturalWidth) {
+                return false;
+            }
+        }
+        return true;
+    }
+    function waitReceiptReady(root) {
+        var def = $.Deferred();
+        var start = Date.now();
+        (function check() {
+            var elapsed = Date.now() - start;
+            if ((elapsed >= 600 && receiptReady(root)) || elapsed >= 5000) {
+                def.resolve();
+            } else {
+                setTimeout(check, 100);
+            }
+        })();
+        return def;
+    }
+
     function quickPay(widget, kind) {
         var pos = widget.pos;
         var gui = widget.gui;
@@ -180,13 +207,19 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
             var order = this.pos.get_order();
             if (order && order._qp_quick_pay && !order._printed && !this._qpUsesProxy()) {
                 var self = this;
-                waitAfterPrint().then(function () {
-                    var finalized = order.is_to_invoice() ? order.finalized : true;
-                    if (self.pos.get_order() === order && finalized) {
-                        self.click_next();
+                this.lock_screen(true);
+                waitReceiptReady(this.el).then(function () {
+                    if (self.pos.get_order() !== order || order._printed) {
+                        return;
                     }
+                    waitAfterPrint().then(function () {
+                        var finalized = order.is_to_invoice() ? order.finalized : true;
+                        if (self.pos.get_order() === order && finalized) {
+                            self.click_next();
+                        }
+                    });
+                    self.print();
                 });
-                this.print();
                 return;
             }
             return this._super.apply(this, arguments);
