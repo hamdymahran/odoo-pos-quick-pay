@@ -1,0 +1,71 @@
+<section class="oe_container" style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0f172a;">
+    <div class="oe_row oe_spaced" style="max-width:980px;margin:0 auto;padding:24px 16px;">
+
+        <div style="text-align:center;margin-bottom:28px;">
+            <h2 style="font-size:34px;font-weight:700;margin:0 0 8px;">POS Quick Pay Hotkeys</h2>
+            <p style="font-size:18px;color:#475569;margin:0;">
+                Press one key to pay the whole order, print the receipt and start the next order.
+            </p>
+            <p style="font-size:14px;color:#64748b;margin:10px 0 0;">
+                Odoo 12 · 13 · 14 · 15 · 16 · 17 · 18 · 19 · 20 &nbsp;|&nbsp; Community &amp; Enterprise &nbsp;|&nbsp; Free
+            </p>
+        </div>
+
+        <div style="text-align:center;margin-bottom:32px;">
+            <img src="banner.png" alt="POS Quick Pay Hotkeys" style="max-width:100%;border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.25);"/>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:32px;">
+            <div style="flex:1 1 280px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:20px;">
+                <div style="display:inline-block;background:#10b981;color:#fff;font-weight:700;font-size:22px;border-radius:8px;padding:6px 14px;margin-bottom:10px;">F10</div>
+                <h3 style="margin:0 0 6px;font-size:20px;">Cash payment</h3>
+                <p style="margin:0;color:#334155;">Pays the full amount due in cash, validates the order, prints the receipt and opens a new order.</p>
+            </div>
+            <div style="flex:1 1 280px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:20px;">
+                <div style="display:inline-block;background:#2563eb;color:#fff;font-weight:700;font-size:22px;border-radius:8px;padding:6px 14px;margin-bottom:10px;">F12</div>
+                <h3 style="margin:0 0 6px;font-size:20px;">Card payment</h3>
+                <p style="margin:0;color:#334155;">Pays the full amount by card (bank / mada / Visa), validates, prints and opens a new order.</p>
+            </div>
+        </div>
+
+        <h3 style="font-size:22px;margin:0 0 12px;">Features</h3>
+        <ul style="font-size:15px;line-height:1.9;color:#334155;margin:0 0 28px;padding-left:20px;">
+            <li>Works from the <b>Products</b> screen and the <b>Payment</b> screen.</li>
+            <li>Uses Odoo's own validation, so invoicing, customer checks, cash drawer and stock behave exactly as with the Validate button.</li>
+            <li>Prints the receipt automatically for the hotkey orders only. Your normal printing settings stay unchanged.</li>
+            <li>Picks the payment methods automatically: the cash method for F10, and for F12 the card method whose name contains <i>Card, Bank, Visa, mada, شبكة, مدى…</i> (or the first non-cash method).</li>
+            <li>Payment terminals: if the card method is linked to a payment terminal, the order opens on the Payment screen so the cashier sends the request to the terminal.</li>
+            <li>Works with IoT Box / ePos printers and with the browser printing.</li>
+            <li>No configuration and no new fields. Install and use.</li>
+        </ul>
+
+        <h3 style="font-size:22px;margin:0 0 12px;">Silent printing without the print dialog</h3>
+        <p style="font-size:15px;color:#334155;margin:0 0 8px;">
+            With an IoT Box or an Epson ePos printer, the receipt prints directly. With browser printing, start Chrome with the
+            <code>--kiosk-printing</code> option so the receipt goes to the default printer without a dialog:
+        </p>
+        <pre style="background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;font-size:13px;direction:ltr;white-space:pre-wrap;">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing http://your-odoo-server/pos/web</pre>
+
+        <hr style="margin:36px 0;border:none;border-top:1px solid #e2e8f0;"/>
+
+        <div dir="rtl" style="text-align:right;">
+            <h2 style="font-size:28px;font-weight:700;margin:0 0 10px;">دفع سريع بالكيبورد لنقطة البيع</h2>
+            <p style="font-size:17px;color:#475569;margin:0 0 18px;">
+                زر واحد يدفع كامل الفاتورة ويطبع الإيصال مباشرة ويفتح طلباً جديداً.
+            </p>
+            <ul style="font-size:16px;line-height:2;color:#334155;margin:0 0 20px;padding-right:20px;">
+                <li><b>F10</b>: دفع نقدي بكامل المبلغ + طباعة مباشرة + طلب جديد.</li>
+                <li><b>F12</b>: دفع شبكة (مدى / فيزا) بكامل المبلغ + طباعة مباشرة + طلب جديد.</li>
+                <li>يعمل من شاشة المنتجات ومن شاشة الدفع.</li>
+                <li>يستخدم نفس تحقق أودو الأصلي (الفاتورة، العميل، درج النقود، المخزون).</li>
+                <li>يختار طريقة الدفع تلقائياً. لاختيار طريقة الشبكة سمّها باسم يحتوي على: شبكة أو مدى أو Card أو Bank.</li>
+                <li>لا يحتاج أي إعداد. ثبّت المديول وابدأ.</li>
+                <li>للطباعة بدون نافذة الطباعة: شغّل كروم بخيار <code>--kiosk-printing</code> أو استخدم IoT Box.</li>
+            </ul>
+        </div>
+
+        <div style="text-align:center;margin-top:36px;padding:18px;background:#f8fafc;border-radius:12px;">
+            <p style="margin:0;font-size:15px;color:#334155;">Developed by <b>Hamdy Mahran</b></p>
+        </div>
+    </div>
+</section>
