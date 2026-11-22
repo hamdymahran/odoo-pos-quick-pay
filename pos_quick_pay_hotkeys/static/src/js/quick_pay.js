@@ -50,6 +50,25 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
         });
     }
 
+
+    // ينتظر اكتمال صور الإيصال (رمز QR والشعار) قبل الطباعة،
+    // لأن بعض مديولات الفاتورة الضريبية ترسم الـ QR بعد ظهور الإيصال.
+    function receiptReady(root) {
+        return [...(root ? root.querySelectorAll('img') : [])].every(
+            (img) => img.getAttribute('src') && img.complete && img.naturalWidth
+        );
+    }
+    async function waitReceiptReady(root) {
+        const start = Date.now();
+        for (;;) {
+            const elapsed = Date.now() - start;
+            if ((elapsed >= 600 && receiptReady(root)) || elapsed >= 5000) {
+                return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+    }
+
     function configMethods(pos) {
         const ids = pos.config.payment_method_ids || [];
         return pos.payment_methods.filter((m) => !ids.length || ids.includes(m.id));
@@ -188,6 +207,10 @@ odoo.define('pos_quick_pay_hotkeys.quick_pay', function (require) {
                 const proxy = this.env.proxy || this.env.pos.proxy;
                 if (order && order._qpQuickPay && !(proxy && proxy.printer)) {
                     if (order._printed) {
+                        return;
+                    }
+                    await waitReceiptReady(this.el);
+                    if (this.currentOrder !== order || order._printed) {
                         return;
                     }
                     const printed = waitAfterPrint();
