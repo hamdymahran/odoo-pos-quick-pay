@@ -11,16 +11,18 @@ POS Quick Pay Hotkeys
 
 دفع سريع بالكيبورد: F10 نقدي و F12 شبكة، مع طباعة الإيصال مباشرة وفتح طلب جديد.
 """,
-    'version': '14.0.1.0.0',
+    'version': '15.0.1.0.0',
     'category': 'Sales/Point of Sale',
     'author': 'Hamdy Mahran',
     'maintainer': 'Hamdy Mahran',
     'website': 'https://github.com/hamdymahran',
     'license': 'LGPL-3',
     'depends': ['point_of_sale'],
-    'data': [
-        'views/assets.xml',
-    ],
+    'assets': {
+        'point_of_sale.assets': [
+            'pos_quick_pay_hotkeys/static/src/js/quick_pay.js',
+        ],
+    },
     'images': ['static/description/banner.png'],
     'installable': True,
     'application': False,
