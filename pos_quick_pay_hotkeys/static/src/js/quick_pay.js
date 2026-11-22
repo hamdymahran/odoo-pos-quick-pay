@@ -1,23 +1,27 @@
 /** @odoo-module */
 /*
- * POS Quick Pay Hotkeys — Odoo 18
+ * POS Quick Pay Hotkeys — Odoo 19
  * Author: Hamdy Mahran
  *
  *   F10  -> pay the full amount in CASH, print the receipt, start a new order
  *   F12  -> pay the full amount by CARD (شبكة / مدى), print, start a new order
+ *
+ * Built on Odoo's native "fast payment" validation (OrderPaymentValidation).
  */
 
 import { _t } from "@web/core/l10n/translation";
 import { patch } from "@web/core/utils/patch";
 import { onMounted, onWillUnmount } from "@odoo/owl";
+import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { ProductScreen } from "@point_of_sale/app/screens/product_screen/product_screen";
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
-import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
+import OrderPaymentValidation from "@point_of_sale/app/utils/order_payment_validation";
 
 // غيّر المفاتيح هنا إن أردت
 export const HOTKEYS = { F10: "cash", F12: "card" };
 const KEYCODES = { 121: "F10", 123: "F12" };
 const CARD_NAME_RE = /شبك|مدى|mada|card|بطاق|visa|master|network|span|بنك|bank|pos/i;
+const BUSY_STATUSES = ["pending", "waiting", "waitingCard", "waitingCapture", "waitingCancel", "reversing"];
 
 let busy = false;
 
@@ -27,41 +31,72 @@ function hotkeyKind(ev) {
 }
 
 function dialogOpen() {
-    return [...document.querySelectorAll(".modal-dialog, .o_dialog, .popup")].some(
+    return [...document.querySelectorAll(".modal-dialog, .o_dialog")].some(
         (el) => el.getClientRects().length > 0
     );
 }
 
-function isTerminal(m) {
-    return Boolean(m.use_payment_terminal || m.payment_terminal);
-}
+const isCash = (m) => m.type === "cash" || m.is_cash_count === true;
+const isTerminal = (m) => Boolean(m.use_payment_terminal || m.payment_provider || m.payment_interface);
+const isQr = (m) => /qr/.test(m.payment_method_type || "");
 
 export function pickMethod(methods, kind) {
-    const usable = methods.filter((m) => m.type !== "pay_later");
+    const usable = methods.filter((m) => m.type !== "pay_later" && !isQr(m));
     if (kind === "cash") {
-        return usable.find((m) => m.is_cash_count || m.type === "cash") || null;
+        return usable.find(isCash) || null;
     }
-    const card = usable.filter((m) => !(m.is_cash_count || m.type === "cash"));
+    const card = usable.filter((m) => !isCash(m));
     return card.find((m) => CARD_NAME_RE.test(m.name || "")) || card[0] || null;
 }
 
 function configMethods(pos) {
-    return [...(pos.config.payment_method_ids || [])].sort((a, b) => a.sequence - b.sequence);
+    const methods = pos.config.paymentMethods || pos.config.payment_method_ids || [];
+    return [...methods].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
 }
 
-function showError(env, kind) {
-    env.services.dialog.add(AlertDialog, {
-        title: _t("Quick Pay"),
-        body:
+function showError(pos, message) {
+    (pos.dialog || pos.env.services.dialog).add(AlertDialog, { title: _t("Quick Pay"), body: message });
+}
+
+async function quickPay(pos, kind) {
+    const order = pos.getOrder();
+    if (!order || !order.lines.length || (order.canPay && !order.canPay())) {
+        return;
+    }
+    const method = pickMethod(configMethods(pos), kind);
+    if (!method) {
+        return showError(
+            pos,
             kind === "cash"
                 ? _t("No cash payment method in this point of sale. / لا توجد طريقة دفع نقدية في نقطة البيع.")
-                : kind === "card"
-                ? _t("No card payment method in this point of sale. / لا توجد طريقة دفع شبكة في نقطة البيع.")
-                : _t("An electronic payment is in progress. / توجد عملية دفع إلكتروني قيد التنفيذ."),
-    });
+                : _t("No card payment method in this point of sale. / لا توجد طريقة دفع شبكة في نقطة البيع.")
+        );
+    }
+    if (order.payment_ids.some((l) => BUSY_STATUSES.includes(l.payment_status))) {
+        return showError(pos, _t("An electronic payment is in progress. / توجد عملية دفع إلكتروني قيد التنفيذ."));
+    }
+    if (isTerminal(method)) {
+        // جهاز دفع مربوط: افتح شاشة الدفع ليكمل الكاشير العملية مع الجهاز
+        return pos.pay();
+    }
+    for (const line of [...order.payment_ids]) {
+        order.removePaymentline(line);
+    }
+    busy = true;
+    try {
+        const validation = new OrderPaymentValidation({
+            pos,
+            orderUuid: order.uuid,
+            fastPaymentMethod: method,
+        });
+        validation.qpQuickPay = true;
+        await validation.validateOrder(false);
+    } finally {
+        busy = false;
+    }
 }
 
-function useQuickPayKeys(component, onKind) {
+function useQuickPayKeys(component) {
     const handler = (ev) => {
         const kind = hotkeyKind(ev);
         if (!kind) {
@@ -69,100 +104,42 @@ function useQuickPayKeys(component, onKind) {
         }
         ev.preventDefault();
         ev.stopPropagation();
-        if (ev.repeat || busy || dialogOpen()) {
+        if (ev.repeat || busy || component.isValidatingOrder || dialogOpen()) {
             return;
         }
-        onKind(kind);
+        quickPay(component.pos, kind);
     };
     onMounted(() => window.addEventListener("keydown", handler, true));
     onWillUnmount(() => window.removeEventListener("keydown", handler, true));
 }
 
-// يجبر الطباعة التلقائية وتخطي شاشة الإيصال لهذا الطلب فقط
-async function withForcedDirectPrint(config, fn) {
-    const saved = [config.iface_print_auto, config.iface_print_skip_screen];
-    config.iface_print_auto = true;
-    config.iface_print_skip_screen = true;
-    try {
-        return await fn();
-    } finally {
-        [config.iface_print_auto, config.iface_print_skip_screen] = saved;
-    }
-}
-
 patch(ProductScreen.prototype, {
     setup() {
         super.setup(...arguments);
-        useQuickPayKeys(this, (kind) => this._qpQuickPay(kind));
-    },
-    async _qpQuickPay(kind) {
-        const order = this.pos.get_order();
-        if (!order || !order.get_orderlines().length) {
-            return;
-        }
-        const method = pickMethod(configMethods(this.pos), kind);
-        if (!method) {
-            return showError(this.env, kind);
-        }
-        order._qpMethodId = method.id;
-        await this.pos.pay();
+        useQuickPayKeys(this);
     },
 });
 
 patch(PaymentScreen.prototype, {
     setup() {
         super.setup(...arguments);
-        useQuickPayKeys(this, (kind) => {
-            const method = pickMethod(this.payment_methods_from_config, kind);
-            if (!method) {
-                return showError(this.env, kind);
-            }
-            this._qpPayWith(method);
-        });
+        useQuickPayKeys(this);
     },
-    onMounted() {
-        super.onMounted(...arguments);
-        const order = this.currentOrder;
-        if (order && order._qpMethodId) {
-            const method = this.payment_methods_from_config.find((m) => m.id === order._qpMethodId);
-            delete order._qpMethodId;
-            if (method) {
-                this._qpPayWith(method);
-            }
+});
+
+// طباعة مباشرة ثم طلب جديد بدون المرور بشاشة الإيصال
+patch(OrderPaymentValidation.prototype, {
+    get canPrintReceipt() {
+        if (this.qpQuickPay) {
+            return this.order.nb_print === 0 && (this.order.isToInvoice() ? this.order.finalized : true);
         }
+        return super.canPrintReceipt;
     },
-    async _qpPayWith(method) {
-        if (busy) {
-            return;
+    get nextPage() {
+        const next = super.nextPage;
+        if (this.qpQuickPay && next && next.page === "ReceiptScreen") {
+            return { page: "FeedbackScreen", params: { orderUuid: this.order.uuid } };
         }
-        const order = this.currentOrder;
-        if (order.electronic_payment_in_progress()) {
-            return showError(this.env, "busy");
-        }
-        for (const line of [...order.payment_ids]) {
-            order.remove_paymentline(line);
-        }
-        // تضيف سطر دفع بكامل المبلغ المستحق
-        if (!(await this.addNewPaymentLine(method))) {
-            return;
-        }
-        if (isTerminal(method)) {
-            // جهاز دفع مربوط: يكمل الكاشير من شاشة الدفع
-            return;
-        }
-        order._qpQuickPay = true;
-        busy = true;
-        try {
-            await this.validateOrder(false);
-        } finally {
-            busy = false;
-        }
-    },
-    async afterOrderValidation() {
-        const order = this.currentOrder;
-        if (!order || !order._qpQuickPay) {
-            return super.afterOrderValidation(...arguments);
-        }
-        return withForcedDirectPrint(this.pos.config, () => super.afterOrderValidation(...arguments));
+        return next;
     },
 });
