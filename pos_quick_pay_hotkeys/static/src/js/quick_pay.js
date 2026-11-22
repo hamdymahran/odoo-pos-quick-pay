@@ -1,6 +1,6 @@
 /** @odoo-module */
 /*
- * POS Quick Pay Hotkeys — Odoo 19
+ * POS Quick Pay Hotkeys — Odoo 20
  * Author: Hamdy Mahran
  *
  *   F10  -> pay the full amount in CASH, print the receipt, start a new order
@@ -16,6 +16,7 @@ import { AlertDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { ProductScreen } from "@point_of_sale/app/screens/product_screen/product_screen";
 import { PaymentScreen } from "@point_of_sale/app/screens/payment_screen/payment_screen";
 import OrderPaymentValidation from "@point_of_sale/app/utils/order_payment_validation";
+import { FeedbackScreen } from "@point_of_sale/app/screens/feedback_screen/feedback_screen";
 
 // غيّر المفاتيح هنا إن أردت
 export const HOTKEYS = { F10: "cash", F12: "card" };
@@ -82,6 +83,7 @@ async function quickPay(pos, kind) {
     for (const line of [...order.payment_ids]) {
         order.removePaymentline(line);
     }
+    order._qpQuickPay = true;
     busy = true;
     try {
         const validation = new OrderPaymentValidation({
@@ -141,5 +143,15 @@ patch(OrderPaymentValidation.prototype, {
             return { page: "FeedbackScreen", params: { orderUuid: this.order.uuid } };
         }
         return next;
+    },
+});
+
+// شاشة "تم الدفع" تختفي تلقائياً وتفتح طلباً جديداً
+patch(FeedbackScreen.prototype, {
+    get isAutoSkip() {
+        if (this.currentOrder?._qpQuickPay) {
+            return true;
+        }
+        return super.isAutoSkip;
     },
 });
